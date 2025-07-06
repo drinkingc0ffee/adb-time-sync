@@ -201,11 +201,26 @@ def check_root_access(device_id=None):
     
     # Test 3: Check for rootshell command (as specified in requirements)
     print("  Checking for 'rootshell' command...")
+    rootshell_found = False
+    
+    # First try 'which rootshell' (checks PATH)
     success, output, error = run_adb_command(f"{base_cmd} 'which rootshell'")
     if success and output.strip():
         root_info['root_commands'].append('rootshell')
         print(f"  ✅ Found 'rootshell' at: {output.strip()}")
-        
+        rootshell_found = True
+    else:
+        # Try common rootshell locations
+        rootshell_paths = ['/bin/rootshell', '/system/bin/rootshell', '/system/xbin/rootshell']
+        for path in rootshell_paths:
+            success, output, error = run_adb_command(f"{base_cmd} 'test -f {path} && echo {path}'")
+            if success and path in output:
+                root_info['root_commands'].append('rootshell')
+                print(f"  ✅ Found 'rootshell' at: {path}")
+                rootshell_found = True
+                break
+    
+    if rootshell_found:
         # Test rootshell access
         success, output, error = run_adb_command(f"{base_cmd} 'rootshell -c \"id\"'")
         if success and 'uid=0' in output:
@@ -257,9 +272,20 @@ def check_root_access(device_id=None):
             print(f"  Current device time: {current_time.strip()}")
             
             # Test if we can set time (use a command that should work)
-            test_cmd = f"{base_cmd} '{root_info['root_method']} -c \"date --help\"'"
             if root_info['root_method'] == 'direct':
                 test_cmd = f"{base_cmd} 'date --help'"
+            elif root_info['root_method'] == 'rootshell':
+                # Try to find the actual rootshell path for testing
+                rootshell_cmd = 'rootshell'
+                rootshell_paths = ['/bin/rootshell', '/system/bin/rootshell', '/system/xbin/rootshell']
+                for path in rootshell_paths:
+                    success_test, output_test, error_test = run_adb_command(f"{base_cmd} 'test -f {path} && echo found'")
+                    if success_test and 'found' in output_test:
+                        rootshell_cmd = path
+                        break
+                test_cmd = f"{base_cmd} '{rootshell_cmd} -c \"date --help\"'"
+            else:
+                test_cmd = f"{base_cmd} '{root_info['root_method']} -c \"date --help\"'"
             
             success, output, error = run_adb_command(test_cmd)
             if success:
@@ -288,6 +314,11 @@ def set_device_time(ntp_time, device_id=None, root_method='rootshell'):
     # Android date format: MMDDhhmm[[CC]YY][.ss]
     time_str = local_time.strftime("%m%d%H%M%Y.%S")
     
+    # Build base ADB command
+    base_cmd = "shell"
+    if device_id:
+        base_cmd = f"-s {device_id} shell"
+    
     # Build ADB command based on root method
     if root_method == 'direct':
         date_cmd = f"date -s {time_str}"
@@ -296,13 +327,20 @@ def set_device_time(ntp_time, device_id=None, root_method='rootshell'):
     elif root_method == 'sudo':
         date_cmd = f"sudo -n date -s {time_str}"
     elif root_method == 'rootshell':
-        date_cmd = f"rootshell -c \"date -s {time_str}\""
+        # Find the actual rootshell path
+        rootshell_cmd = 'rootshell'
+        rootshell_paths = ['/bin/rootshell', '/system/bin/rootshell', '/system/xbin/rootshell']
+        for path in rootshell_paths:
+            success_test, output_test, error_test = run_adb_command(f"{base_cmd} 'test -f {path} && echo found'")
+            if success_test and 'found' in output_test:
+                rootshell_cmd = path
+                print(f"Using rootshell at: {path}")
+                break
+        date_cmd = f"{rootshell_cmd} -c \"date -s {time_str}\""
     else:
         raise ValueError(f"Unknown root method: {root_method}")
     
-    adb_cmd = f"shell '{date_cmd}'"
-    if device_id:
-        adb_cmd = f"-s {device_id} shell '{date_cmd}'"
+    adb_cmd = f"{base_cmd} '{date_cmd}'"
     
     print(f"Setting device time to: {local_time}")
     print(f"Using root method: {root_method}")
