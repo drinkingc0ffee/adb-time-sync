@@ -222,7 +222,7 @@ def check_root_access(device_id=None):
     
     if rootshell_found:
         # Test rootshell access
-        success, output, error = run_adb_command(f"{base_cmd} 'rootshell -c \"id\"'")
+        success, output, error = run_adb_command(f"{base_cmd} 'rootshell -c id'")
         if success and 'uid=0' in output:
             root_info['has_root'] = True
             root_info['root_method'] = 'rootshell'
@@ -283,7 +283,7 @@ def check_root_access(device_id=None):
                     if success_test and 'found' in output_test:
                         rootshell_cmd = path
                         break
-                test_cmd = f"{base_cmd} '{rootshell_cmd} -c \"date --help\"'"
+                test_cmd = f"{base_cmd} '{rootshell_cmd} -c date --help'"
             else:
                 test_cmd = f"{base_cmd} '{root_info['root_method']} -c \"date --help\"'"
             
@@ -336,7 +336,7 @@ def set_device_time(ntp_time, device_id=None, root_method='rootshell'):
                 rootshell_cmd = path
                 print(f"Using rootshell at: {path}")
                 break
-        date_cmd = f"{rootshell_cmd} -c \"date -s {time_str}\""
+        date_cmd = f"{rootshell_cmd} -c date -s {time_str}"
     else:
         raise ValueError(f"Unknown root method: {root_method}")
     
